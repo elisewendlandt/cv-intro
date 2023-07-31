@@ -12,6 +12,7 @@ def get_lane_center(lanes: np.ndarray):
             center_intercept (float): The horizontal intercept of the center of the closest lane.
             center_slope (float): The slope of the closest lane.
     """
+    
     height, width, depth = img.shape()
     center = width/2
     min = 10000000000
@@ -32,7 +33,7 @@ def get_lane_center(lanes: np.ndarray):
     return(center_intercept, center_slope)
 
 
-def recommend_direction(center: float, slope: float):
+def recommend_direction(center_intercept: float, slope: float):
     """
     Takes the center of the closest lane and its slope as inputs and returns a direction.
 
@@ -42,14 +43,13 @@ def recommend_direction(center: float, slope: float):
 
         Returns:
             direction (str): left, right, forward
-    """
-
+    """ 
     height, width = img.shape() 
     camera_pov = width/2
 
-    if camera_pov < center and slope < 0:
+    if camera_pov < center_intercept and slope < 0:
         return "Right"
-    elif camera_pov > center and slope > 0:
+    elif camera_pov > center_intercept and slope > 0:
         return "Left"
     else:
         return "Straight"

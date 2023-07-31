@@ -118,3 +118,4 @@ def draw_lanes(img: np.ndarray, lanes: list):
         for lane in pair:
             x1, y1, x2, y2 = lane[0][0]
             cv2.line(img, (x1, y1), (x2, y2), color, 2)
+    plt.imshow(img)
