@@ -1,4 +1,4 @@
-import cv2
+import cv2, math
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -25,13 +25,14 @@ def detect_lines(
         Returns:
             lines (np.ndarray)
     """
-
+    img = cv2.GaussianBlur(img, (9,9), 0)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, threshold1, threshold2, apertureSize=apertureSize)
+    _,bw = cv2.threshold(gray, 80, 255, cv2.THRESH_BINARY)
+    #kernel = np.ones((5, 5), np.float32) / 25
+    edges = cv2.Canny(bw, threshold1, threshold2, apertureSize=apertureSize)
     lines = cv2.HoughLinesP(
         edges, 1, np.pi / 180, 100, minLineLength=minLineLength, maxLineGap=maxLineGap
     )
-    print(edges, lines)
     return lines
 
 
@@ -81,25 +82,61 @@ def detect_lanes(img: np.ndarray, lines: np.ndarray):
             lanes (list): The list of lanes.
     """
 
-    def chunk(l, n):
-        return [l[i : i + n] for i in range(0, len(l), n)]
+    def avg_color(colors):
+        colors = np.array(colors)
+        r = sum(colors[:, 0])
+        g = sum(colors[:, 1])
+        b = sum(colors[:, 2])
+        return (r / len(colors), g / len(colors), b / len(colors))
 
-    def avg_color(*colors):
+    def dist_color(c1, c2):
         """
-        Find the average of color one and two.
-
-            Parameters:
-                *colors (tuple)
+        Returns distance between two colors.
         """
 
-        return np.average(colors)
+        (r1, g1, b1) = c1
+        (r2, g2, b2) = c2
+        return math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2)
+
+    def dist(l1, l2):
+        return abs(l1[2] - l2[2])
 
     slopes, intercepts = get_slopes_intercepts(lines)
     # => ([x1, y1, x2, y2], slope, x-intercept) for every "line"
-    sort = sorted(zip(lines, slopes, intercepts), key=lambda pair: pair[1])
-    #
+    # Let's sort the lines in order first
+    sort = list(sorted(zip(lines, slopes, intercepts), key=lambda pair: pair[1]))
 
-    return chunk(sort, 2)
+    cleaned = []
+    for line in sort:
+        can_add = True
+        for clean in cleaned:
+            if abs(clean[2] - line[2]) < 0.1:
+                can_add = False
+
+        if can_add:
+            cleaned.append(line)
+
+    i = 0
+    height, width, _ = img.shape
+    lanes = []
+    if len(cleaned) == 2:
+        return [cleaned]
+    while i < len(cleaned) - 2:
+        try:
+            curr_line = cleaned[i]
+            next_line = cleaned[i + 1]
+            next_next_line = cleaned[i + 2]
+            intercept1, intercept2 = curr_line[2], next_line[2]
+            slope1, slope2 = curr_line[1], next_line[1]
+            if dist(curr_line, next_line) < dist(next_line, next_next_line):
+                lanes.append([curr_line, next_line])
+                i += 2
+                continue
+            i += 1
+        except:  
+            i += 1
+            continue
+    return lanes
 
 
 def draw_lanes(img: np.ndarray, lanes: list):
@@ -113,9 +150,7 @@ def draw_lanes(img: np.ndarray, lanes: list):
 
     random_color = lambda: list(np.random.random(size=3) * 256)
     for pair in lanes:
-        print(pair)
         color = random_color()
         for lane in pair:
             x1, y1, x2, y2 = lane[0][0]
             cv2.line(img, (x1, y1), (x2, y2), color, 2)
-    plt.imshow(img)
